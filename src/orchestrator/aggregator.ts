@@ -56,8 +56,7 @@ export async function aggregateResults(opts: AggregatorOptions): Promise<Orchest
         "--model", model,
         "--effort", effort,
         "--system-prompt-file", sysPromptFile,
-        "--permission-mode", "auto",
-        "--allowedTools", "Read,Glob,Grep",
+        "--dangerously-skip-permissions",
       ],
       {
         cwd: workingDirectory,

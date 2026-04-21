@@ -22,7 +22,7 @@ program
   .option("-c, --concurrency <n>", "동시 워커 수", "3")
   .option("-m, --model <model>", "기본 모델 (opus/sonnet/haiku)", "opus")
   .option("-e, --effort <level>", "추론 강도 (low/medium/high/max)", "max")
-  .option("-p, --permission <mode>", "권한 모드 (strict/auto/unrestricted)", "auto")
+  .option("-p, --permission <mode>", "권한 모드 (strict/auto/unrestricted)", "unrestricted")
   .option("-d, --dir <path>", "워킹 디렉터리", process.cwd())
   .option("--budget <usd>", "총 예산 상한 (USD)")
   .action(async (task: string, opts) => {
@@ -111,7 +111,7 @@ program
   .option("-c, --concurrency <n>", "동시 워커 수", "3")
   .option("-m, --model <model>", "기본 모델 (opus/sonnet/haiku)", "opus")
   .option("-e, --effort <level>", "추론 강도 (low/medium/high/max)", "max")
-  .option("-p, --permission <mode>", "권한 모드 (strict/auto/unrestricted)", "auto")
+  .option("-p, --permission <mode>", "권한 모드 (strict/auto/unrestricted)", "unrestricted")
   .option("-d, --dir <path>", "워킹 디렉터리", process.cwd())
   .option("--port <port>", "대시보드 포트", "3000")
   .action(async (opts) => {

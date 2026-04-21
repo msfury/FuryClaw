@@ -29,7 +29,8 @@ export const DEFAULT_CONFIG: FuryClawConfig = {
   concurrency: 3,
   defaultModel: "opus",
   effort: "max",
-  permissionMode: "auto",
+  // 띄우는 Claude는 무한 권한이 기본. 비대화형이라 권한 프롬프트 처리자가 없음.
+  permissionMode: "unrestricted",
   mcpPort: 39999,
   roles: {
     // General purpose — can do anything on the computer

@@ -51,8 +51,9 @@ RESPOND WITH EXACTLY THIS JSON STRUCTURE (no markdown, no code fences):
     "--model", CLAUDE_MODEL_ID,
     "--effort", effort,
     "--system-prompt-file", sysPromptFile,
-    "--permission-mode", "auto",
-    "--allowedTools", "Read,Glob,Grep",
+    // 띄우는 Claude는 무한 권한 — 인터랙티브 모드가 아니므로 권한 프롬프트가 떠도
+    // 처리할 사람이 없음. 탐색·파일 읽기·외부 디렉터리 접근 모두 자유롭게.
+    "--dangerously-skip-permissions",
   ];
 
   logger.info("planner", `Claude CLI 호출 시작. userTask=${userTask.slice(0, 120)}…`);
@@ -128,11 +129,17 @@ RESPOND WITH EXACTLY THIS JSON STRUCTURE (no markdown, no code fences):
         parsed = JSON.parse(jsonMatch[0]);
       } catch {
         const dump = dumpIfNeeded("extracted JSON parse 실패");
-        throw new Error(`Planner 응답에서 JSON 추출 실패. 상세: ${dump}`);
+        const snippet = claudeResult.slice(0, 400).replace(/\n/g, " ");
+        throw new Error(
+          `Planner 응답 일부만 JSON. 상세: ${dump}\nPlanner가 말한 내용(발췌): ${snippet}`
+        );
       }
     } else {
       const dump = dumpIfNeeded("응답에 JSON 없음");
-      throw new Error(`Planner 응답에 JSON 없음. 상세: ${dump}`);
+      const snippet = claudeResult.slice(0, 400).replace(/\n/g, " ");
+      throw new Error(
+        `Planner가 JSON 대신 대화로 답했습니다. 상세: ${dump}\nPlanner가 말한 내용(발췌): ${snippet}`
+      );
     }
   }
 

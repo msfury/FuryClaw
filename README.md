@@ -47,7 +47,7 @@ PM (orchestrator/pm.ts)
 - **PM은 수다스럽게**. 주요 이벤트마다 사용자에게 자연어로 상황 공유. 하드코딩 영어 상태 문자열 금지.
 - **워커는 플랜과 스텝을 구체적으로 선언**. 추상어("작업하기") 금지. 3~7 단계로 분해.
 - **W↔W 조율**. 중복 태스크는 `list_workers`로 사전 감지, 내 일이 빨리 끝나면 `claim_step`으로 느린 워커 도움. `broadcast`로 발견 즉시 공유.
-- **권한 티어**. 재정·개인정보 외부 전송만 사용자 승인, 파일 조작/빌드/테스트/로컬 git은 자동 허용 (`src/permissions/permission-tier.ts`).
+- **띄우는 Claude는 무한 권한**. Planner/Aggregator/Worker는 비대화형이라 권한 프롬프트 처리자가 없음 → `--dangerously-skip-permissions` 기본. `permission-tier.ts` 의 티어 정의는 장기적으로 사용자 대화형 Claude 세션용 참고자료.
 - **코드가 SSOT**. 규칙 문서보다 `TOOL_DEFS`·`CLAUDE_MODEL_ID`·`KOREAN_LANGUAGE_DIRECTIVE` 같은 코드 상수가 권위. 자세한 건 `CLAUDE.md` 참조.
 
 ## 설치
@@ -84,7 +84,7 @@ furyclaw web [옵션]
   -c, --concurrency <n>    동시 실행 워커 수 (기본 3)
   -m, --model <model>      모델 (opus/sonnet/haiku, 기본 opus)
   -e, --effort <level>     추론 강도 (low/medium/high/max, 기본 max)
-  -p, --permission <mode>  권한 모드 (strict/auto/unrestricted, 기본 auto)
+  -p, --permission <mode>  권한 모드 (strict/auto/unrestricted, 기본 unrestricted)
   -d, --dir <path>         워킹 디렉터리
       --port <port>        대시보드 포트 (기본 3000)
 
