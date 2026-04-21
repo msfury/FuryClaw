@@ -17,6 +17,7 @@ import { startMCPServer, type MCPServer, type MCPEvent, type WorkerRuntime } fro
 import type { SubTask, TaskPlan, WorkerResult } from "../types/task.js";
 import type { FuryClawConfig } from "../types/config.js";
 import type { StreamEvent } from "../workers/stream-parser.js";
+import { logger, LOG_FILE_PATH } from "../utils/logger.js";
 
 // ─── 타입 ───
 
@@ -206,6 +207,7 @@ export class ProjectManager extends EventEmitter {
 
   // ─── 작업 시작 ───
   private async startTask(userTask: string) {
+    logger.info("pm", `새 작업 시작. userTask=${userTask.slice(0, 120)}…`);
     this.state.status = "planning";
     this.state.plan = null;
     this.state.workers.clear();
@@ -219,15 +221,17 @@ export class ProjectManager extends EventEmitter {
       try {
         this.mcp = await startMCPServer(this.config.mcpPort);
         this.wireMCPEvents(this.mcp);
+        logger.info("pm", `MCP 서버 기동. port=${this.mcp.port} config=${this.mcp.configPath}`);
       } catch (err) {
         this.state.status = "error";
-        this.addChat("system", `MCP 서버 기동 실패: ${err instanceof Error ? err.message : err}`, "status");
+        logger.error("pm", "MCP 서버 기동 실패", err);
+        this.addChat("system", `MCP 서버 기동 실패: ${err instanceof Error ? err.message : err}\n(로그: ${LOG_FILE_PATH})`, "status");
         this.emit("state");
         return;
       }
     } else {
-      // 이전 작업의 워커 상태 제거
       this.mcp.reset();
+      logger.info("pm", "MCP 서버 상태 리셋");
     }
 
     this.askPmAgentToChat(`[EVENT] 사용자가 새 작업을 맡겼습니다. 지금부터 Planner가 작업을 분해할 거예요. 시작한다고 짧게 알리세요.`);
@@ -242,11 +246,20 @@ export class ProjectManager extends EventEmitter {
         effort: this.config.effort,
       });
       this.state.plan = plan;
+      logger.info("pm", `Planner 성공. 태스크 ${plan.tasks.length}개`);
     } catch (err) {
       this.state.status = "error";
       const errMsg = err instanceof Error ? err.message : String(err);
-      this.addChat("system", `Planner 실패: ${errMsg}`, "status");
-      this.askPmAgentToChat(`[EVENT] Planner가 작업 분해에 실패했습니다. 에러: ${errMsg.slice(0, 300)}. 사용자에게 짧게 알리세요.`);
+      logger.error("pm", "Planner 실패", err);
+      this.addChat(
+        "system",
+        `❌ Planner 실패\n${errMsg}\n\n전체 런타임 로그: ${LOG_FILE_PATH}`,
+        "status"
+      );
+      // PMAgent에게: 자동 재시도 없음을 명시 — 환각 방지
+      this.askPmAgentToChat(
+        `[EVENT] Planner가 작업 분해에 실패했고 **자동 재시도는 없습니다**. 에러 요지: ${errMsg.slice(0, 300)}.\n\n사용자에게:\n1) 어느 단계에서 실패했는지 한 문장\n2) 다시 시도하려면 같은 요청을 한 번 더 보내달라고 안내\n3) 상세 로그 경로는 채팅에 이미 표시됨\n\n절대 "자동으로 재시도합니다"처럼 사실과 다른 위안을 하지 마세요.`
+      );
       this.emit("state");
       return;
     }
@@ -322,6 +335,7 @@ export class ProjectManager extends EventEmitter {
       w.status = "running";
       w.startTime = Date.now();
       w.logs.push({ time: Date.now(), type: "init", message: `시작 — ${task.role}: ${task.mission}` });
+      logger.info("worker", `spawn ${task.id} role=${task.role}`);
       this.askPmAgentToChat(
         `[EVENT] 워커 ${task.id}(${task.role})가 작업을 시작했습니다. 미션: ${task.mission}. 사용자에게 한 줄로 알리세요.`
       );
@@ -359,6 +373,7 @@ export class ProjectManager extends EventEmitter {
       this.state.totalCostUsd = [...this.state.workers.values()].reduce((s, ww) => s + ww.costUsd, 0);
 
       if (result.success) {
+        logger.info("worker", `done ${task.id} ${(result.durationMs/1000).toFixed(1)}s $${result.costUsd.toFixed(4)} files=${result.filesChanged.length}`);
         w.logs.push({
           time: Date.now(),
           type: "done",
@@ -372,13 +387,14 @@ export class ProjectManager extends EventEmitter {
           `[EVENT] 워커 ${task.id}(${task.role})가 완료했습니다 (${(result.durationMs / 1000).toFixed(1)}초, $${result.costUsd.toFixed(4)}).${filesInfo}\n핵심 결정: ${result.decisions.join(" | ") || "없음"}\n\n사용자에게 어떤 작업이 끝났는지 한두 문장으로 알리세요.`
         );
       } else {
+        logger.error("worker", `fail ${task.id}`, result.output.slice(0, 1000));
         w.logs.push({
           time: Date.now(),
           type: "error",
           message: `실패: ${result.output.slice(0, 300)}`,
         });
         this.askPmAgentToChat(
-          `[EVENT] 워커 ${task.id}(${task.role})가 실패했습니다. 에러: ${result.output.slice(0, 300)}\n사용자에게 상황 알리고, 다음에 어떻게 할지 짧게 제안하세요.`
+          `[EVENT] 워커 ${task.id}(${task.role})가 실패했습니다. **자동 재시도 없음**. 에러: ${result.output.slice(0, 300)}\n사용자에게 상황 알리고, 다음에 어떻게 할지 짧게 제안. 거짓 위로 금지.`
         );
       }
       this.emit("state");

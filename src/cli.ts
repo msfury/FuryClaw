@@ -5,6 +5,7 @@ import chalk from "chalk";
 import { ProjectManager } from "./orchestrator/pm.js";
 import { loadConfig } from "./config/config.js";
 import { startDashboard } from "./web/server.js";
+import { LOG_FILE_PATH, logger } from "./utils/logger.js";
 
 const program = new Command();
 
@@ -36,9 +37,11 @@ program
     console.log(
       chalk.bold.magenta("\n  FuryClaw") +
         chalk.dim(
-          ` v0.1.0 — 워커 ${config.concurrency}개, 모델 ${config.defaultModel}, effort ${config.effort}\n`
+          ` v0.1.0 — 워커 ${config.concurrency}개, 모델 ${config.defaultModel}, effort ${config.effort}`
         )
     );
+    console.log(chalk.dim(`  로그: ${LOG_FILE_PATH}\n`));
+    logger.info("cli", `run 모드 시작. dir=${opts.dir}`);
 
     const pm = new ProjectManager(config, opts.dir);
     let lastChatLen = 0;
@@ -125,6 +128,8 @@ program
           ` v0.1.0 — 모델 ${config.defaultModel}, effort ${config.effort}, 워커 ${config.concurrency}개`
         )
     );
+    console.log(chalk.dim(`  로그: ${LOG_FILE_PATH}`));
+    logger.info("cli", `web 모드 시작. dir=${opts.dir} port=${opts.port}`);
 
     await startDashboard(config, opts.dir, parseInt(opts.port, 10));
   });

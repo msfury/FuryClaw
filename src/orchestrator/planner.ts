@@ -6,6 +6,7 @@ import { TaskPlanSchema, type TaskPlan } from "../types/task.js";
 import { topologicalSort } from "../workers/worker-manager.js";
 import { PLANNER_SYSTEM_PROMPT } from "./prompts.js";
 import { CLAUDE_MODEL_ID } from "../config/models.js";
+import { logger, dumpToFile } from "../utils/logger.js";
 
 export interface PlannerOptions {
   userTask: string;
@@ -54,6 +55,8 @@ RESPOND WITH EXACTLY THIS JSON STRUCTURE (no markdown, no code fences):
     "--allowedTools", "Read,Glob,Grep",
   ];
 
+  logger.info("planner", `Claude CLI 호출 시작. userTask=${userTask.slice(0, 120)}…`);
+
   const result = await execa("claude", args, {
     cwd: workingDirectory,
     reject: false,
@@ -65,42 +68,71 @@ RESPOND WITH EXACTLY THIS JSON STRUCTURE (no markdown, no code fences):
   const stdout = String(result.stdout || "");
   const stderr = String(result.stderr || "");
 
+  // 실패/이상 흐름 감지 시 raw 출력을 파일로 덤프 후 경로를 에러 메시지에 포함시킨다.
+  const dumpIfNeeded = (reason: string) => {
+    const dumpContent = [
+      `# Planner 실패 덤프`,
+      `# reason: ${reason}`,
+      `# exitCode: ${result.exitCode}`,
+      `# cwd: ${workingDirectory}`,
+      `# userTask: ${userTask}`,
+      ``,
+      `===== STDERR =====`,
+      stderr || "(empty)",
+      ``,
+      `===== STDOUT =====`,
+      stdout || "(empty)",
+    ].join("\n");
+    const path = dumpToFile("planner", "error", dumpContent);
+    logger.error("planner", `${reason}. 덤프: ${path}`);
+    return path;
+  };
+
   if (result.exitCode !== 0) {
-    throw new Error(`Planner exited with code ${result.exitCode}.\nStderr: ${stderr.slice(0, 500)}\nStdout: ${stdout.slice(0, 500)}`);
+    const dump = dumpIfNeeded("non-zero exit");
+    throw new Error(
+      `Planner exit ${result.exitCode}. 상세: ${dump || stderr.slice(0, 300)}`
+    );
   }
 
   if (!stdout.trim()) {
-    throw new Error(`Planner returned empty output. Stderr: ${stderr.slice(0, 500)}`);
+    const dump = dumpIfNeeded("empty stdout");
+    throw new Error(`Planner 빈 출력. 상세: ${dump}`);
   }
 
-  // Parse Claude's JSON output
+  // Claude CLI의 JSON 출력 파싱
   let claudeResult: string;
   try {
     const jsonResult = JSON.parse(stdout);
     if (jsonResult.is_error) {
-      throw new Error(`Claude error: ${jsonResult.result || "unknown"}`);
+      const dump = dumpIfNeeded("claude is_error=true");
+      throw new Error(`Claude 에러: ${jsonResult.result || "unknown"}. 상세: ${dump}`);
     }
     claudeResult = jsonResult.result ?? "";
   } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Claude error:")) throw err;
-    throw new Error(`Failed to parse Claude output: ${(err as Error).message}\nRaw: ${stdout.slice(0, 500)}`);
+    if (err instanceof Error && err.message.startsWith("Claude 에러:")) throw err;
+    const dump = dumpIfNeeded("stdout JSON parse 실패");
+    throw new Error(
+      `Claude 출력 파싱 실패: ${(err as Error).message}. 상세: ${dump}`
+    );
   }
 
-  // Extract JSON from Claude's response (might have text around it)
+  // Claude 응답에서 JSON 추출 (앞뒤 텍스트가 있을 수도 있음)
   let parsed: unknown;
   try {
     parsed = JSON.parse(claudeResult);
   } catch {
-    // Try to find JSON in the response
     const jsonMatch = claudeResult.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       try {
         parsed = JSON.parse(jsonMatch[0]);
       } catch {
-        throw new Error(`Could not extract JSON from planner response:\n${claudeResult.slice(0, 800)}`);
+        const dump = dumpIfNeeded("extracted JSON parse 실패");
+        throw new Error(`Planner 응답에서 JSON 추출 실패. 상세: ${dump}`);
       }
     } else {
-      throw new Error(`No JSON found in planner response:\n${claudeResult.slice(0, 800)}`);
+      const dump = dumpIfNeeded("응답에 JSON 없음");
+      throw new Error(`Planner 응답에 JSON 없음. 상세: ${dump}`);
     }
   }
 
@@ -108,8 +140,16 @@ RESPOND WITH EXACTLY THIS JSON STRUCTURE (no markdown, no code fences):
   try {
     plan = TaskPlanSchema.parse(parsed);
   } catch (err) {
-    throw new Error(`Plan validation failed: ${(err as Error).message}\nParsed: ${JSON.stringify(parsed).slice(0, 500)}`);
+    const dump = dumpToFile(
+      "planner",
+      "schema-fail",
+      `# zod 검증 실패\n${(err as Error).message}\n\n# parsed 값\n${JSON.stringify(parsed, null, 2)}`
+    );
+    logger.error("planner", `TaskPlanSchema 검증 실패. 덤프: ${dump}`);
+    throw new Error(`플랜 스키마 검증 실패. 상세: ${dump}`);
   }
+
+  logger.info("planner", `플랜 생성 성공. 태스크 ${plan.tasks.length}개.`);
 
   // Auto-compute execution order if not provided
   if (!plan.executionOrder || plan.executionOrder.length === 0) {
