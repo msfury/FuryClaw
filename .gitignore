@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.furyclaw/
+.idea/
+.claude/
+*.iml
+*.log
+.env
+.DS_Store
+Thumbs.db

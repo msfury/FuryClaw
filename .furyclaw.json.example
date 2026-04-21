@@ -1,0 +1,23 @@
+{
+  "concurrency": 3,
+  "defaultModel": "sonnet",
+  "permissionMode": "auto",
+  "mcpPort": 39999,
+  "roles": {
+    "implementer": {
+      "description": "Implements features and writes code",
+      "systemPromptSuffix": "You implement code changes.",
+      "allowedTools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "Agent"]
+    },
+    "tester": {
+      "description": "Writes and runs tests",
+      "systemPromptSuffix": "You write and run tests.",
+      "allowedTools": ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+    },
+    "reviewer": {
+      "description": "Reviews code for bugs and quality",
+      "systemPromptSuffix": "You review code for correctness and quality.",
+      "allowedTools": ["Read", "Glob", "Grep"]
+    }
+  }
+}
