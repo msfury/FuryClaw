@@ -2,7 +2,8 @@ node_modules/
 dist/
 .furyclaw/
 .idea/
-.claude/
+.claude/*
+!.claude/settings.json
 *.iml
 *.log
 .env
